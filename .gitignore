@@ -1,1 +1,5 @@
 ﻿elf.h
+*.vpj
+*.vpw
+*.vpwhist
+*.vtg

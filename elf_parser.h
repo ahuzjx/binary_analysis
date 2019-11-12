@@ -22,6 +22,9 @@ public:
     void show_relocs_section_info();
     void show_dynamic_section_info();
     void show_plt_section_info();
+    void show_plt_got_section_info();
+    void show_got_plt_section_info();
+    void show_got_section_info();
 private:
     Elf64_Shdr* _get_section_header(const char *sec_name);
     void _show_phdr(Elf64_Phdr *phdr);

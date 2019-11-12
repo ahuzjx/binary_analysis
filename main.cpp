@@ -23,5 +23,8 @@ int main(int argc,  char **argv) {
     //parser.show_relocs_section_info();
     //parser.show_dynamic_section_info();
     parser.show_plt_section_info();
+    parser.show_plt_got_section_info();
+    parser.show_got_plt_section_info();
+    parser.show_got_section_info();
     return 0;
 }

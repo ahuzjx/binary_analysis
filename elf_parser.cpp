@@ -9,18 +9,81 @@
 #include <stdlib.h>
 #include <string.h>
 #include "udis86.h"
+/** 
+ *  section type: VERNEED
+ *  content type: DATA
+ */
 static const std::string section_name_gnu_version_r = ".gnu.version_r";
+/** 
+ *  section type: VERSYM
+ *  content type: DATA 
+ */
 static const std::string section_name_gnu_version = ".gnu.version";
+/** 
+ *  section type: DYNSYM
+ *  content type: DATA
+ */
 static const std::string section_name_dynsym = ".dynsym";
+/** 
+ *  section type: STRTAB
+ *  content type: DATA
+ */
 static const std::string section_name_dynstr = ".dynstr";
+/** 
+ *  section type: PROGBITS
+ *  content type: DATA
+ */
 static const std::string section_name_interp = ".interp";
+/** 
+ * section type: SYMTAB 
+ * content type: DATA 
+ */
 static const std::string section_name_symtab = ".symtab";
+/** 
+ *  section type: STRTAB
+ *  content type: DATA
+ */
 static const std::string section_name_strtab = ".strtab";
+/** 
+ *  section type: STRTAB
+ *  content type: DATA
+ */
 static const std::string section_name_shstrtab = ".shstrtab";
+/** 
+ *  section type: RELA
+ *  content type: DATA
+ */
 static const std::string section_name_rela_dyn = ".rela.dyn";
+/** 
+ *  section type: RELA
+ *  content type: DATA 
+ */
 static const std::string section_name_rela_plt = ".rela.plt";
+/** 
+ *  section type: DYNAMIC
+ *  content type: DATA
+ */
 static const std::string section_name_dynamic = ".dynamic";
+/** 
+ *  section type: PROGBITS
+ *  content type: CODE 
+ */
 static const std::string section_name_plt = ".plt";
+/** 
+ *  section type: PROGBITS
+ *  content type: CODE
+ */
+static const std::string section_name_plt_got = ".plt.got";
+/**
+ * section type: PROGBITS
+ * content type: DATA
+ */
+static const std::string section_name_got_plt = ".got.plt"; 
+/**
+ * section type: PROGBITS
+ * content type: DATA
+ */
+static const std::string section_name_got = ".got";
 
 Elf64_Parser::Elf64_Parser()
 	: mem_(NULL),
@@ -341,6 +404,7 @@ void Elf64_Parser::show_interp_section_info()
 	if (!interp_shdr) {
 		return;
 	}
+    _show_shdr(interp_shdr);
 	printf("interp: %s\n", (char *)&mem_[interp_shdr->sh_offset]);
 }
 
@@ -387,8 +451,8 @@ void Elf64_Parser::_show_shdr(Elf64_Shdr *shdr)
 	printf("offset: %08lx\n", shdr->sh_offset);
 	printf("size: %016lx\n", shdr->sh_size);
 	printf("entsize: %016lx\n", shdr->sh_entsize);
-	printf("link: %lx\n", shdr->sh_link);
-	printf("info: %lx\n", shdr->sh_info);
+	printf("link: %x\n", shdr->sh_link);
+	printf("info: %x\n", shdr->sh_info);
 	printf("addralign: %lx\n", shdr->sh_addralign);
 }
 
@@ -494,7 +558,7 @@ void Elf64_Parser::show_plt_section_info() {
 	}
 	_show_shdr(plt_shdr);
 	Elf64_Half plt_entry_num = plt_shdr->sh_size / plt_shdr->sh_entsize;
-	printf(".plt entry num: %ld\n", plt_entry_num);
+	printf(".plt entry num: %d\n", plt_entry_num);
 	plt_entry_asm *plt_data = (plt_entry_asm *)&mem_[plt_shdr->sh_offset];
 	for (Elf64_Half i = 0; i < plt_entry_num;++i) {
 		ud_t ud_object;
@@ -510,7 +574,57 @@ void Elf64_Parser::show_plt_section_info() {
 	}
 }
 
+void Elf64_Parser::show_plt_got_section_info() {
+    printf("-------------------.plt.got section -----------------------------\n");
+    Elf64_Shdr *plt_got_shdr = _get_section_header(section_name_plt_got.c_str());
+    if(!plt_got_shdr) {
+        printf("has no .plt.got section\n");
+        return;
+    }
+    _show_shdr(plt_got_shdr);
+    printf("%016lx <.plt.got>\n", plt_got_shdr->sh_addr);
+    ud_t ud_object;
+    ud_init(&ud_object);
+    ud_set_input_buffer(&ud_object, &mem_[plt_got_shdr->sh_offset], plt_got_shdr->sh_size);
+    ud_set_mode(&ud_object, 64);
+    ud_set_syntax(&ud_object, UD_SYN_INTEL);
+    while(ud_disassemble(&ud_object)) {
+        printf("\t%s\n", ud_insn_asm(&ud_object));
+    }
+    printf("\n");
+}
 
+void Elf64_Parser::show_got_plt_section_info() {
+    printf("-------------------.got.plt section -----------------------------\n");
+    Elf64_Shdr *got_plt_shdr = _get_section_header(section_name_got_plt.c_str());
+    if(!got_plt_shdr) {
+        printf("has no .got.plt section\n");
+        return;
+    }
+    _show_shdr(got_plt_shdr);
+    Elf64_Half got_plt_entry_num = got_plt_shdr->sh_size / got_plt_shdr->sh_entsize;
+    Elf64_Addr *plt_addr = (Elf64_Addr *)&mem_[got_plt_shdr->sh_offset];
+    for(Elf64_Half i = 0; i < got_plt_entry_num;++i) {
+        printf("index:%d addr:%016lx\n", i, *plt_addr);
+        ++plt_addr;
+    }
+}
+
+void Elf64_Parser::show_got_section_info() {
+    printf("-------------------.got section -----------------------------\n"); 
+    Elf64_Shdr *got_shdr = _get_section_header(section_name_got.c_str());
+    if(!got_shdr) {
+        printf("has no .got section\n");
+        return;
+    }
+    _show_shdr(got_shdr);
+    Elf64_Half got_entry_num = got_shdr->sh_size / got_shdr->sh_entsize;
+    Elf64_Addr *got_entry = (Elf64_Addr *)&mem_[got_shdr->sh_offset];
+    for(Elf64_Half i = 0; i < got_entry_num;++i) {
+        printf("index:%d addr:%08lx\n", i, *got_entry);
+        ++got_entry;
+    }
+}
 
 #define CASE_DYN_TYPE(type) \
 	case type: \
@@ -626,7 +740,7 @@ void Elf64_Parser::show_dynamic_section_info() {
 				printf("%ld\n", dyn->d_un.d_val);
 				break;
 			default:
-				printf("0x%lx\n", dyn->d_un.d_val, dyn->d_un.d_ptr);
+				printf("0x%lx\n", dyn->d_un.d_val);
 				break;
 		}
 		
@@ -665,7 +779,7 @@ void Elf64_Parser::_show_rela_dyn_section_info()
 	Elf64_Rela *rela = (Elf64_Rela *)&mem_[rela_dyn_shdr->sh_offset];
 	for (Elf64_Half i = 0; i < rela_dyn_ent_num; ++i) {
 		printf("\n");
-		printf("sym index: %d\n", ELF64_R_SYM(rela->r_info));
+		printf("sym index: %ld\n", ELF64_R_SYM(rela->r_info));
 		printf("Sym.Value  %016lx\n", dyn_sym_vec_[ELF64_R_SYM(rela->r_info)]->st_value);
 		printf("Sym.name + Addend: %s + %lx\n", dyn_sym_name_vec_[ELF64_R_SYM(rela->r_info)].c_str(), rela->r_addend);
 		printf("r_offset: %016lx\n", rela->r_offset);
@@ -735,7 +849,7 @@ void Elf64_Parser::_show_rela_plt_section_info()
 	Elf64_Rela *rela = (Elf64_Rela *)&mem_[rela_plt_shdr->sh_offset];
 	for (Elf64_Half i = 0; i < rela_plt_ent_num; ++i) {
 		printf("\n");
-		printf("sym index: %d\n", ELF64_R_SYM(rela->r_info));
+		printf("sym index: %ld\n", ELF64_R_SYM(rela->r_info));
 		printf("Sym.Value  %016lx\n", dyn_sym_vec_[ELF64_R_SYM(rela->r_info)]->st_value);
 		printf("Sym.name + Addend: %s + %lx\n", dyn_sym_name_vec_[ELF64_R_SYM(rela->r_info)].c_str(), rela->r_addend);
 		printf("r_offset: %016lx\n", rela->r_offset);
