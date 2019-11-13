@@ -25,6 +25,8 @@ public:
     void show_plt_got_section_info();
     void show_got_plt_section_info();
     void show_got_section_info();
+    void load_symtab_section();
+    Elf64_Addr lookup_symbol(const char *symname);
 private:
     Elf64_Shdr* _get_section_header(const char *sec_name);
     void _show_phdr(Elf64_Phdr *phdr);
@@ -47,5 +49,6 @@ private:
     std::vector<Elf64_Half> gnu_ver_sym_vec_;
     std::vector<Elf64_Sym *> dyn_sym_vec_;
     std::vector<std::string> dyn_sym_name_vec_;
+    std::map<std::string, Elf64_Sym *> symtab_map_;
 };
 #endif

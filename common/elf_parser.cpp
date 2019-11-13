@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "udis86.h"
 /** 
  *  section type: VERNEED
@@ -95,7 +96,8 @@ Elf64_Parser::Elf64_Parser()
 	  vernaux_map_(),
 	  gnu_ver_sym_vec_(),
 	  dyn_sym_vec_(),
-	  dyn_sym_name_vec_()
+	  dyn_sym_name_vec_(),
+	  symtab_map_()
 {
 
 }
@@ -115,14 +117,17 @@ bool Elf64_Parser::load_elf_file_to_mem(const char *file_name)
 	}
 	if (fstat(fd, &st) < 0) {
 		printf("fstat %s failed!\n", file_name);
+		close(fd);
 		return false;
 	}
 
 	mem_ = (uint8_t *)mmap(NULL,  st.st_size, PROT_READ,  MAP_PRIVATE, fd, 0);
 	if (MAP_FAILED == mem_) {
 		printf("mmap failed!\n");
+		close(fd); 
 		return false;
 	}
+	close(fd);
 	ehdr_ = (Elf64_Ehdr *)mem_;
 	_load_section_header_info();
 	return true;
@@ -242,7 +247,6 @@ void Elf64_Parser::show_elf_header_info()
 void Elf64_Parser::show_program_header_info()
 {
 	printf("-------------------program header -----------------------------\n");
-	Elf64_Off phdr_offset = ehdr_->e_phoff;
 	uint16_t phnum = ehdr_->e_phnum;
 	Elf64_Phdr *phdr = (Elf64_Phdr *)&mem_[ehdr_->e_phoff];
 	for (int i = 0; i < phnum; ++i) {
@@ -340,6 +344,38 @@ void Elf64_Parser::show_symtab_section_info()
 		printf("%d section name: %s\n", i, &strtab_table[sym->st_name]);
 		sym++;
 	}
+}
+
+void Elf64_Parser::load_symtab_section() {
+	if (!symtab_map_.empty()) {
+		return;
+	}
+	Elf64_Shdr *symtab_shdr = _get_section_header(section_name_symtab.c_str());
+	if (!symtab_shdr) {
+		printf("has not .symtab section\n");
+		return;
+	}
+	Elf64_Shdr *strtab_shdr = _get_section_header(section_name_strtab.c_str());
+	if (!strtab_shdr) {
+		printf("has not .strtab section\n");
+		return;
+	}
+	Elf64_Half symtab_ent_num = symtab_shdr->sh_size / symtab_shdr->sh_entsize;
+	char *strtab_table = (char *)&mem_[strtab_shdr->sh_offset];
+	Elf64_Sym *sym = (Elf64_Sym *)&mem_[symtab_shdr->sh_offset];
+	for (Elf64_Half i = 0; i < symtab_ent_num; ++i) {
+		symtab_map_[& strtab_table[sym->st_name]]=sym;
+		sym++;
+	}
+}
+
+Elf64_Addr Elf64_Parser::lookup_symbol(const char *symname) {
+	load_symtab_section();
+	auto sym_iter = symtab_map_.find(symname);
+	if (sym_iter == symtab_map_.end()) {
+		return 0;
+	}
+	return sym_iter->second->st_value;
 }
 
 Elf64_Half Elf64_Parser::_get_dynsym_gnu_ver_name(Elf64_Half index)
@@ -565,7 +601,7 @@ void Elf64_Parser::show_plt_section_info() {
 		ud_init(&ud_object);
 		ud_set_input_buffer(&ud_object, plt_data->data, sizeof(plt_entry_asm));
 		ud_set_mode(&ud_object, 64);
-		ud_set_syntax(&ud_object, UD_SYN_INTEL);
+		ud_set_syntax(&ud_object, UD_SYN_ATT);
 		while (ud_disassemble(&ud_object)) {
 			printf("\t%s\n", ud_insn_asm(&ud_object));
 		}
@@ -587,7 +623,7 @@ void Elf64_Parser::show_plt_got_section_info() {
     ud_init(&ud_object);
     ud_set_input_buffer(&ud_object, &mem_[plt_got_shdr->sh_offset], plt_got_shdr->sh_size);
     ud_set_mode(&ud_object, 64);
-    ud_set_syntax(&ud_object, UD_SYN_INTEL);
+	ud_set_syntax(&ud_object, UD_SYN_ATT);
     while(ud_disassemble(&ud_object)) {
         printf("\t%s\n", ud_insn_asm(&ud_object));
     }
